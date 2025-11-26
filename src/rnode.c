@@ -7,6 +7,9 @@
  */
 
 #include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+
 #include "rnode.h"
 #include "kiss.h"
 #include "util.h"
@@ -105,6 +108,13 @@
 #define ERROR_MEMORY_LOW    0x05
 #define ERROR_MODEM_TIMEOUT 0x06
 
+static uint8_t  seq = SEQ_UNSET;
+static uint8_t  buf_in[MTU];
+static size_t   len_in = 0;
+
+static uint8_t  buf_out[MTU];
+static size_t   len_out = 0;
+
 /* * */
 
 static void ans_detect(const uint8_t *param) {
@@ -169,7 +179,7 @@ static void ans_radio_state(const uint8_t *param) {
 
 /* * */
 
-void rnode_send(const uint8_t *buf, size_t len) {
+void rnode_from_channel(const uint8_t *buf, size_t len) {
     dump("RNode", buf, len);
 
     uint8_t cmd = buf[0];
@@ -217,11 +227,99 @@ void rnode_send(const uint8_t *buf, size_t len) {
             ans_radio_state(buf);
             break;
 
+        case CMD_DATA:
+            break;
+
         case CMD_LEAVE:
             break;
 
         default:
             printf("RNode: Unknown %02X\n", cmd);
             break;
+    }
+}
+
+void rnode_signal_stat(uint8_t rssi, int8_t snr, uint8_t signal_rssi) {
+    uint8_t ans_rssi[] = { CMD_STAT_RSSI, rssi };
+    uint8_t ans_snr[] = { CMD_STAT_SNR, snr };
+
+    kiss_encode(ans_rssi, sizeof(ans_rssi));
+    kiss_encode(ans_snr, sizeof(ans_snr));
+}
+
+static void append_buf(const uint8_t *buf, size_t len) {
+    memcpy(&buf_in[len_in], buf, len);
+    len_in += len;
+}
+
+void rnode_from_air(const uint8_t *buf, size_t len) {
+    /* The standard operating mode allows large */
+    /* packets with a payload up to 500 bytes,  */
+    /* by combining two raw LoRa packets.       */
+    /* We read the 1-byte header and extract    */
+    /* packet sequence number and split flags   */
+
+    dump("RNode from air", buf, len);
+
+    uint8_t header = *buf;
+    bool    split = header & FLAG_SPLIT;
+    uint8_t sequence = header >> 4;
+    bool    ready = false;
+
+    buf++;
+    len--;
+
+    if (split) {
+        if (seq == SEQ_UNSET) {
+            /* This is the first part of a split    */
+            /* packet, so we set the seq variable   */
+            /* and add the data to the buffer       */
+
+            len_in = 0;
+            append_buf(buf, len);
+            seq = sequence;
+        } else if (seq == sequence) {
+            /* This is the second part of a split   */
+            /* packet, so we add it to the buffer   */
+            /* and set ready flag                   */
+
+            append_buf(buf, len);
+            seq = SEQ_UNSET;
+            ready = true;
+        } else {
+            /* This split packet does not carry the */
+            /* same sequence id, so we must assume  */
+            /* that we are seeing the first part of */
+            /* a new split packet.                  */
+
+            len_in = 0;
+            append_buf(buf, len);
+            seq = sequence;
+        }
+    } else {
+        /* This is not a split packet, so we    */
+        /* just read it and set the ready       */
+        /* flag to true.                        */
+
+        if (seq != SEQ_UNSET) {
+            /* If we already had part of a split    */
+            /* packet in the buffer, we clear it.   */
+
+            len_in = 0;
+            seq = SEQ_UNSET;
+        }
+
+        append_buf(buf, len);
+        ready = true;
+    }
+
+    if (ready) {
+        uint8_t buf_kiss[len_in + 1];
+
+        buf_kiss[0] = CMD_DATA;
+        memcpy(&buf_kiss[1], buf_in, len_in);
+        kiss_encode(buf_kiss, len_in + 1);
+
+        len_in = 0;
     }
 }

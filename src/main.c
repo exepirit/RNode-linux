@@ -11,6 +11,7 @@
 
 #include "sx126x.h"
 #include "tcp.h"
+#include "rnode.h"
 
 /* For Lora board RNS-Gate */
 
@@ -28,18 +29,14 @@ void rx_done_callback(uint16_t len) {
     uint8_t buf[len];
 
     if (len > 0) {
-        float rssi, snr, signal_rssi;
+        uint8_t rssi, signal_rssi;
+        int8_t snr;
+
+        sx126x_packet_signal_raw(&rssi, &snr, &signal_rssi);
+        rnode_signal_stat(rssi, snr, signal_rssi);
 
         sx126x_read(buf, len);
-        sx126x_packet_signal(&rssi, &snr, &signal_rssi);
-
-        printf("%i bytes (rssi %.1f, snr %.1f, signal %.1f)\n", len, rssi, snr, signal_rssi);
-
-        for (uint16_t i = 0; i < len; i++) {
-            printf("%02X ", buf[i]);
-        }
-
-        printf("\n");
+        rnode_from_air(buf, len);
     }
 }
 

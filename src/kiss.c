@@ -18,7 +18,7 @@
 
 static uint8_t  buf_in[MTU];
 static size_t   len_in = 0;
-static bool     in_frame = false;
+static bool     sync = false;
 static bool     escape = false;
 
 static uint8_t  buf_out[MTU];
@@ -27,16 +27,13 @@ void kiss_decode(const uint8_t *buf, size_t len) {
     for (size_t i = 0; i < len; i++) {
         uint8_t byte = buf[i];
 
-        if (in_frame && byte == FEND) {
-            if (len_in > 0) {
-                rnode_send(buf_in, len_in);
+        if (byte == FEND) {
+            if (sync && len_in > 0) {
+                rnode_from_channel(buf_in, len_in);
             }
-            in_frame = true;
             len_in = 0;
-        } else if (byte == FEND) {
-            in_frame = true;
-            len_in = 0;
-        } else if (in_frame) {
+            sync = true;
+        } else if (sync) {
             if (byte == FESC) {
                 escape = true;
             } else {
@@ -55,7 +52,7 @@ void kiss_decode(const uint8_t *buf, size_t len) {
                 if (len_in >= sizeof(buf_in)) {
                     len_in = 0;
                     escape = false;
-                    in_frame = false;
+                    sync = false;
 
                     return;
                 }

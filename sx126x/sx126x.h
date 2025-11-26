@@ -98,4 +98,5 @@ void sx126x_end_packet();
 void sx126x_request(uint32_t timeout);
 uint8_t sx126x_available();
 void sx126x_read(uint8_t *buf, uint16_t len);
-float sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi);
+void sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi);
+void sx126x_packet_signal_raw(uint8_t *rssi, int8_t *snr, uint8_t *signal_rssi);

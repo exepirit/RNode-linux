@@ -697,7 +697,7 @@ void sx126x_read(uint8_t *buf, uint16_t len) {
     }
 }
 
-float sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi) {
+void sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi) {
     uint8_t raw_rssi;
     int8_t  raw_snr;
     uint8_t raw_signal_rssi;
@@ -708,4 +708,9 @@ float sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi) {
     *rssi = -(float) (raw_rssi) / 2.0f;
     *snr = (float) (raw_snr) / 4.0f;
     *signal_rssi = -(float) (raw_signal_rssi) / 2.0f;
+}
+
+void sx126x_packet_signal_raw(uint8_t *rssi, int8_t *snr, uint8_t *signal_rssi) {
+    wait_on_busy();
+    get_packet_status(rssi, snr, signal_rssi);
 }

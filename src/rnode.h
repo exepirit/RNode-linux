@@ -13,4 +13,7 @@
 
 #define MTU 1024
 
-void rnode_send(const uint8_t *buf, size_t len);
+void rnode_from_channel(const uint8_t *buf, size_t len);
+
+void rnode_signal_stat(uint8_t rssi, int8_t snr, uint8_t signal_rssi);
+void rnode_from_air(const uint8_t *buf, size_t len);
