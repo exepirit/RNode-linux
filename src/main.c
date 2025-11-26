@@ -12,6 +12,7 @@
 #include "sx126x.h"
 #include "tcp.h"
 #include "rnode.h"
+#include "queue.h"
 
 /* For Lora board RNS-Gate */
 
@@ -40,9 +41,6 @@ void rx_done_callback(uint16_t len) {
     }
 }
 
-void tx_done_callback() {
-}
-
 int main() {
     if (!sx126x_init_spi(SPI_DEV, PIN_PORT, SPI_PIN_CS)) {
         printf("Err: SPI init\n");
@@ -69,6 +67,7 @@ int main() {
         return 1;
     }
 
+    queue_init();
     tcp_init(7633);
 
     sx126x_set_dio3_txco_ctrl(DIO3_OUTPUT_1_8, TXCO_DELAY_10);
@@ -80,7 +79,7 @@ int main() {
     sx126x_set_sync_word(0x1424);
 
     sx126x_set_rx_done_callback(rx_done_callback);
-    sx126x_set_tx_done_callback(tx_done_callback);
+    sx126x_set_tx_done_callback(rnode_tx_done);
 
     printf("Ready\n");
 

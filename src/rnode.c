@@ -7,12 +7,18 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
 #include "rnode.h"
 #include "kiss.h"
 #include "util.h"
+#include "queue.h"
+#include "sx126x.h"
+
+#define SINGLE_MTU          255
+#define HEADER_L            1
 
 #define CMD_UNKNOWN         0xFE
 #define CMD_DATA            0x00
@@ -112,8 +118,10 @@ static uint8_t  seq = SEQ_UNSET;
 static uint8_t  buf_in[MTU];
 static size_t   len_in = 0;
 
-static uint8_t  buf_out[MTU];
-static size_t   len_out = 0;
+static uint8_t  seq_tx = SEQ_UNSET;
+static uint8_t  buf_tx[SINGLE_MTU];
+static size_t   len_tx = 0;
+
 
 /* * */
 
@@ -185,6 +193,7 @@ void rnode_from_channel(const uint8_t *buf, size_t len) {
     uint8_t cmd = buf[0];
 
     buf++;
+    len--;
 
     switch (cmd) {
         case CMD_DETECT:
@@ -228,6 +237,7 @@ void rnode_from_channel(const uint8_t *buf, size_t len) {
             break;
 
         case CMD_DATA:
+            queue_push(buf, len);
             break;
 
         case CMD_LEAVE:
@@ -321,5 +331,47 @@ void rnode_from_air(const uint8_t *buf, size_t len) {
         kiss_encode(buf_kiss, len_in + 1);
 
         len_in = 0;
+    }
+}
+
+static void tx_buf(const uint8_t *buf, size_t len, uint8_t flag) {
+    uint8_t buf_air[len + HEADER_L];
+
+    buf_air[0] = seq_tx | flag;
+    memcpy(&buf_air[1], buf, len);
+
+    sx126x_begin_packet();
+    sx126x_write(buf_air, len + HEADER_L);
+    sx126x_end_packet();
+}
+
+void rnode_to_air(const uint8_t *buf, size_t len) {
+    seq_tx = random() & 0xF0;
+
+    if (len <= SINGLE_MTU - HEADER_L) {
+        /* Everything fit into one packet */
+
+        tx_buf(buf, len, 0);
+        len_tx = 0;
+    } else {
+        /* It didn't fit. Save tail... */
+
+        len_tx = len - SINGLE_MTU - HEADER_L;
+        memcpy(buf_tx, &buf[SINGLE_MTU - HEADER_L], len_tx);
+
+        /*  ...and sending the first part */
+
+        tx_buf(buf, SINGLE_MTU - HEADER_L, FLAG_SPLIT);
+    }
+}
+
+void rnode_tx_done() {
+    if (len_tx) {
+        /* There is an unsent tail, sending it */
+
+        tx_buf(buf_tx, len_tx, FLAG_SPLIT);
+        len_tx = 0;
+    } else {
+        sx126x_request(RX_CONTINUOUS);
     }
 }
