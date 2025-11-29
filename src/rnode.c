@@ -17,6 +17,7 @@
 #include "util.h"
 #include "queue.h"
 #include "sx126x.h"
+#include "csma.h"
 
 #define SINGLE_MTU          255
 #define HEADER_L            1
@@ -440,6 +441,7 @@ void rnode_to_air(const uint8_t *buf, size_t len) {
 
         tx_buf(buf, len, 0);
         len_tx = 0;
+        csma_add_airtime(len);
     } else {
         /* It didn't fit. Save tail... */
 
@@ -449,6 +451,7 @@ void rnode_to_air(const uint8_t *buf, size_t len) {
         /*  ...and sending the first part */
 
         tx_buf(buf, SINGLE_MTU - HEADER_L, FLAG_SPLIT);
+        csma_add_airtime(SINGLE_MTU - HEADER_L);
     }
 }
 
@@ -476,4 +479,30 @@ void rnode_rx_done(uint16_t len) {
         rnode_signal_stat(rssi, snr, signal_rssi);
         rnode_from_air(buf, len);
     }
+}
+
+void rnode_send_stat_csma(csma_cw_t *cw) {
+    uint8_t ans[] = { CMD_STAT_CSMA, cw->band, cw->min, cw->max };
+
+    kiss_encode(ans, sizeof(ans));
+}
+
+void rnode_send_stat_channel(csma_channel_t *channel) {
+    uint16_t ats = (uint16_t) (channel->airtime * 100 * 100);
+    uint16_t atl = (uint16_t) (channel->longterm_airtime * 100 * 100);
+    uint16_t cls = (uint16_t) (channel->total_channel_util * 100 * 100);
+    uint16_t cll = (uint16_t) (channel->longterm_channel_util * 100 * 100);
+    uint8_t  crs = (uint8_t) (channel->current_rssi);
+    uint8_t  nfl = (uint8_t) (channel->noise_floor);
+    uint8_t  ntf = 0xFF;
+
+    /*
+    if (interference_detected) {
+        ntf = (uint8_t) (current_rssi + rssi_offset);
+    }
+    */
+
+    uint8_t ans[] = { CMD_STAT_CHTM, ats >> 8, ats, atl >> 8, atl, cls >> 8, cls, cll >> 8, cll, crs, nfl, ntf };
+
+    kiss_encode(ans, sizeof(ans));
 }

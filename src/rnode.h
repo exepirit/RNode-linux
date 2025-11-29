@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "csma.h"
 
 #define MTU 1024
 
@@ -21,3 +22,6 @@ void rnode_to_air(const uint8_t *buf, size_t len);
 
 void rnode_tx_done();
 void rnode_rx_done(uint16_t len);
+
+void rnode_send_stat_csma(csma_cw_t *cw);
+void rnode_send_stat_channel(csma_channel_t *channel);

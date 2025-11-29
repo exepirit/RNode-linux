@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
@@ -18,6 +19,9 @@
 #include <pthread.h>
 
 #include "sx126x.h"
+
+#define PHY_HEADER_LORA_SYMBOLS     20
+#define PHY_CRC_LORA_BITS           16
 
 typedef enum {
     REG_FSK_WHITENING_INITIAL_MSB          = 0x06B8,
@@ -119,6 +123,16 @@ static header_type_t        save_header_type = HEADER_EXPLICIT;
 static uint8_t              save_preamble_len = 12;
 static uint8_t              save_payload_len = 32;
 static crc_t                save_crc = CRC_ON;
+static uint8_t              save_sf;
+static uint8_t              save_cr;
+static uint32_t             save_bw;
+static bool                 save_ldro;
+
+static uint32_t             preamble_symbols;
+static float                symbol_rate;
+static float                symbol_time_ms;
+static uint32_t             bitrate;
+
 static state_t              state = STATE_IDLE;
 
 static sx126x_rx_done_callback_t    rx_done_callback = NULL;
@@ -272,6 +286,26 @@ static bool calibrate_image(cal_img_t min, cal_img_t max) {
 }
 
 static bool set_packet_params_loRa(uint8_t preamble_len, header_type_t header_type, uint8_t payload_len, crc_t crc) {
+    uint8_t e = 1;
+    uint8_t m = 1;
+
+    while (e <= 15) {
+        while (m <= 15) {
+            preamble_symbols = m * (pow(2, e));
+
+            if (preamble_symbols >= preamble_len - 4) {
+                break;
+            }
+            m++;
+        }
+
+        if (preamble_symbols >= preamble_len - 4) {
+            break;
+        }
+
+        m = 1; e++;
+    }
+
     uint8_t msg[] = { 0x8C, (preamble_len >> 8) & 0xFF, preamble_len & 0xFF, header_type, payload_len, crc, 0, 0, 0, 0 };
 
     return write_bytes(msg, sizeof(msg));
@@ -326,6 +360,15 @@ static void get_packet_status(uint8_t *rssi, int8_t *snr, uint8_t *signal_rssi) 
     *rssi = ans[1];
     *snr = (int8_t) ans[2];
     *signal_rssi = ans[3];
+}
+
+static int8_t get_current_rssi() {
+    uint8_t msg[] = { 0x15 };
+    uint8_t ans[] = { 0 };
+
+    write_read_bytes(msg, sizeof(msg), ans, sizeof(ans));
+
+    return ans[0];
 }
 
 static bool set_tx(uint32_t timeout) {
@@ -642,6 +685,27 @@ void sx126x_set_tx_power(uint8_t db, dev_sel_t dev) {
 void sx126x_set_lora_modulation(uint8_t sf, bw_t bw, cr_t cr, ldro_t ldro) {
     uint8_t msg[] = { 0x8B, sf, bw, cr, ldro, 0, 0, 0, 0 };
 
+    save_sf = sf;
+    save_cr = cr + 4;
+    save_ldro = ldro;
+
+    switch (bw) {
+        case BW_7800:   save_bw = 7800;     break;
+        case BW_10400:  save_bw = 10400;    break;
+        case BW_15600:  save_bw = 15600;    break;
+        case BW_20800:  save_bw = 20800;    break;
+        case BW_31250:  save_bw = 31250;    break;
+        case BW_41700:  save_bw = 41700;    break;
+        case BW_62500:  save_bw = 62500;    break;
+        case BW_125000: save_bw = 125000;   break;
+        case BW_250000: save_bw = 250000;   break;
+        case BW_500000: save_bw = 500000;   break;
+    }
+
+    symbol_rate = (float) save_bw / (float)(pow(2, save_sf));
+    symbol_time_ms = (1.0f / symbol_rate) * 1000.0f;
+    bitrate = (uint32_t) (save_sf * ((4.0f / (float) save_cr) / ((float)(pow(2, save_sf)) / ((float)save_bw / 1000.0f))) * 1000.0f);
+
     wait_on_busy();
     write_bytes(msg, sizeof(msg));
 }
@@ -753,4 +817,39 @@ void sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi) {
 void sx126x_packet_signal_raw(uint8_t *rssi, int8_t *snr, uint8_t *signal_rssi) {
     wait_on_busy();
     get_packet_status(rssi, snr, signal_rssi);
+}
+
+int8_t sx126x_current_rssi() {
+    int8_t rssi;
+
+    wait_on_busy();
+
+    return -get_current_rssi(&rssi) / 2;
+}
+
+float sx126x_packet_symbols(uint16_t len) {
+    float   symbols = 0;
+    int     ldr_opt = 0;
+
+    if (save_ldro) {
+        ldr_opt = 1;
+    }
+
+    if (save_sf < 7) {
+        symbols += (8 * len + PHY_CRC_LORA_BITS - 4 * save_sf + PHY_HEADER_LORA_SYMBOLS);
+        symbols /= 4 * save_sf;
+        symbols *= save_cr;
+        symbols += preamble_symbols + 2.25f + 8;
+    } else {
+        symbols += (8 * len + PHY_CRC_LORA_BITS - 4 * save_sf + 8 + PHY_HEADER_LORA_SYMBOLS);
+        symbols /= 4 * (save_sf - 2 * ldr_opt);
+        symbols *= save_cr;
+        symbols += preamble_symbols + 0.25f + 8;
+    }
+
+    return symbols;
+}
+
+float sx126x_lora_symbol_time_ms() {
+    return symbol_time_ms;
 }

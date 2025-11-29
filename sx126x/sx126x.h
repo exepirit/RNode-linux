@@ -102,3 +102,8 @@ uint8_t sx126x_available();
 void sx126x_read(uint8_t *buf, uint16_t len);
 void sx126x_packet_signal(float *rssi, float *snr, float *signal_rssi);
 void sx126x_packet_signal_raw(uint8_t *rssi, int8_t *snr, uint8_t *signal_rssi);
+
+float sx126x_packet_symbols(uint16_t len);
+float sx126x_lora_symbol_time_ms();
+
+int8_t sx126x_current_rssi();

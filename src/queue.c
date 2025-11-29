@@ -15,6 +15,8 @@
 #include "queue.h"
 #include "util.h"
 #include "rnode.h"
+#include "csma.h"
+#include "sx126x.h"
 
 typedef struct item_t {
     uint8_t         *data;
@@ -26,8 +28,9 @@ static struct item_t    *head = NULL;
 static struct item_t    *tail = NULL;
 static pthread_mutex_t  mux;
 
-static bool             medium_free = false;
-static uint64_t         medium_free_delay;
+static bool             tx_enable = false;
+static uint64_t         tx_delay;
+static uint64_t         rssi_delay;
 
 static bool send_packet() {
     bool res = false;
@@ -57,6 +60,7 @@ static bool send_packet() {
     }
 
     pthread_mutex_unlock(&mux);
+    csma_update_airtime();
 
     return res;
 }
@@ -66,15 +70,18 @@ static void * queue_worker(void *p) {
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
     while (true) {
-        if (medium_free) {
+        if (tx_enable) {
             uint64_t now = get_time();
 
-            if (now > medium_free_delay) {
-                if (send_packet()) {
-                    medium_free_delay = now + 1000;
-                } else {
-                    medium_free_delay = now + 500;
-                }
+            if (now > tx_delay) {
+                uint32_t delay = csma_get_cw();
+
+                send_packet();
+                tx_delay = now + delay;
+            } else if (now > rssi_delay) {
+                rssi_delay = now + 1000;
+
+                csma_update_current_rssi();
             }
         } else {
             usleep(1000);
@@ -114,9 +121,11 @@ void queue_push(const uint8_t *buf, size_t len) {
 }
 
 void queue_medium_state(bool free) {
-    medium_free = free;
+    tx_enable = free;
 
     if (free) {
-        medium_free_delay = get_time() + 500;
+        uint32_t delay = csma_get_cw();
+
+        tx_delay = get_time() + delay;
     }
 }
