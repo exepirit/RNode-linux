@@ -47,6 +47,16 @@ int main() {
         return 1;
     }
 
+    if (!sx126x_init_tx_en(PIN_PORT, PIN_TX_EN)) {
+        printf("Err: TX EN pin\n");
+        return 1;
+    }
+
+    if (!sx126x_init_rx_en(PIN_PORT, PIN_RX_EN)) {
+        printf("Err: RX EN pin\n");
+        return 1;
+    }
+
     if (!sx126x_begin()) {
         printf("Err: Begin\n");
         return 1;

@@ -113,6 +113,8 @@ static struct gpiod_line    *cs_line = NULL;
 static struct gpiod_line    *rst_line = NULL;
 static struct gpiod_line    *busy_line = NULL;
 static struct gpiod_line    *dio1_line = NULL;
+static struct gpiod_line    *tx_en_line = NULL;
+static struct gpiod_line    *rx_en_line = NULL;
 static int                  spi_fd;
 
 static uint8_t              fifo_tx_addr_ptr = 0;
@@ -142,6 +144,44 @@ static sx126x_medium_callback_t     medium_callback = NULL;
 static void wait_on_busy() {
     while (gpiod_line_get_value(busy_line) == 1) {
         usleep(100);
+    }
+}
+
+static void switch_ant() {
+    switch (state) {
+        case STATE_IDLE:
+            if (rx_en_line) {
+                gpiod_line_set_value(rx_en_line, 0);
+            }
+            if (tx_en_line) {
+                gpiod_line_set_value(tx_en_line, 0);
+            }
+            break;
+
+        case STATE_RX_SINGLE:
+        case STATE_RX_CONTINUOUS:
+            if (tx_en_line) {
+                gpiod_line_set_value(tx_en_line, 0);
+            }
+
+            usleep(100);
+
+            if (rx_en_line) {
+                gpiod_line_set_value(rx_en_line, 1);
+            }
+            break;
+
+        case STATE_TX:
+            if (rx_en_line) {
+                gpiod_line_set_value(rx_en_line, 0);
+            }
+
+            usleep(100);
+
+            if (tx_en_line) {
+                gpiod_line_set_value(tx_en_line, 1);
+            }
+            break;
     }
 }
 
@@ -542,6 +582,42 @@ bool sx126x_init_dio1(uint8_t port, uint8_t pin) {
     return true;
 }
 
+bool sx126x_init_tx_en(uint8_t port, uint8_t pin) {
+    struct gpiod_chip *chip = gpiod_chip_open_by_number(port);
+
+    if (!chip) {
+        return false;
+    }
+
+    tx_en_line = gpiod_chip_get_line(chip, pin);
+
+    if (!tx_en_line) {
+        return false;
+    }
+
+    gpiod_line_request_output(tx_en_line, "sx126x_tx_en", 0);
+
+    return true;
+}
+
+bool sx126x_init_rx_en(uint8_t port, uint8_t pin) {
+    struct gpiod_chip *chip = gpiod_chip_open_by_number(port);
+
+    if (!chip) {
+        return false;
+    }
+
+    rx_en_line = gpiod_chip_get_line(chip, pin);
+
+    if (!rx_en_line) {
+        return false;
+    }
+
+    gpiod_line_request_output(rx_en_line, "sx126x_rx_en", 0);
+
+    return true;
+}
+
 void sx126x_set_rx_done_callback(sx126x_rx_done_callback_t callback) {
     rx_done_callback = callback;
 }
@@ -559,6 +635,9 @@ bool sx126x_begin() {
     usleep(10000);
     gpiod_line_set_value(rst_line, 1);
     usleep(10000);
+
+    state = STATE_IDLE;
+    switch_ant();
 
     if (!set_standby(STANDBY_RC)) {
         return false;
@@ -760,6 +839,8 @@ void sx126x_end_packet() {
     set_packet_params_loRa(save_preamble_len, save_header_type, payload_tx_rx, save_crc);
 
     state = STATE_TX;
+    switch_ant();
+
     wait_on_busy();
     set_tx(0);
 }
@@ -781,7 +862,7 @@ void sx126x_request(uint32_t timeout) {
         }
     }
 
-
+    switch_ant();
     wait_on_busy();
     set_rx(timeout);
 }

@@ -79,6 +79,8 @@ bool sx126x_init_spi(const char *spidev, uint8_t cs_port, uint8_t cs_pin);
 bool sx126x_init_rst(uint8_t port, uint8_t pin);
 bool sx126x_init_busy(uint8_t port, uint8_t pin);
 bool sx126x_init_dio1(uint8_t port, uint8_t pin);
+bool sx126x_init_tx_en(uint8_t port, uint8_t pin);
+bool sx126x_init_rx_en(uint8_t port, uint8_t pin);
 
 void sx126x_set_rx_done_callback(sx126x_rx_done_callback_t callback);
 void sx126x_set_tx_done_callback(sx126x_tx_done_callback_t callback);
