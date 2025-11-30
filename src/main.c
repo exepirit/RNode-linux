@@ -8,6 +8,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <syslog.h>
 
 #include "sx126x.h"
 #include "tcp.h"
@@ -27,38 +28,40 @@
 #define PIN_TX_EN   18
 
 int main() {
+    openlog("rnode", LOG_PID, LOG_USER);
+
     if (!sx126x_init_spi(SPI_DEV, PIN_PORT, SPI_PIN_CS)) {
-        printf("Err: SPI init\n");
+        syslog(LOG_ERR, "SPI init");
         return 1;
     }
 
     if (!sx126x_init_rst(PIN_PORT, PIN_RST)) {
-        printf("Err: RST pin\n");
+        syslog(LOG_ERR, "RST pin");
         return 1;
     }
 
     if (!sx126x_init_busy(PIN_PORT, PIN_BUSY)) {
-        printf("Err: Busy pin\n");
+        syslog(LOG_ERR, "Busy pin");
         return 1;
     }
 
     if (!sx126x_init_dio1(PIN_PORT, PIN_DIO1)) {
-        printf("Err: DIO1 pin\n");
+        syslog(LOG_ERR, "DIO1 pin");
         return 1;
     }
 
     if (!sx126x_init_tx_en(PIN_PORT, PIN_TX_EN)) {
-        printf("Err: TX EN pin\n");
+        syslog(LOG_ERR, "TX EN pin");
         return 1;
     }
 
     if (!sx126x_init_rx_en(PIN_PORT, PIN_RX_EN)) {
-        printf("Err: RX EN pin\n");
+        syslog(LOG_ERR, "RX EN pin");
         return 1;
     }
 
     if (!sx126x_begin()) {
-        printf("Err: Begin\n");
+        syslog(LOG_ERR, "Begin");
         return 1;
     }
 
@@ -71,9 +74,9 @@ int main() {
     sx126x_set_tx_done_callback(rnode_tx_done);
     sx126x_set_medium_callback(queue_medium_state);
 
-    queue_medium_state(true);
+    queue_medium_state(CAUSE_INIT);
 
-    printf("Init\n");
+    syslog(LOG_INFO, "Start");
 
     while (true) {
         tcp_read();

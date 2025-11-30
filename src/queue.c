@@ -11,12 +11,12 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "queue.h"
 #include "util.h"
 #include "rnode.h"
 #include "csma.h"
-#include "sx126x.h"
 
 typedef struct item_t {
     uint8_t         *data;
@@ -30,19 +30,21 @@ static pthread_mutex_t  mux;
 
 static bool             tx_enable = false;
 static uint64_t         tx_delay;
+static uint32_t         tx_timeout;
+static uint64_t         tx_disabled;
 static uint64_t         rssi_delay;
 
 static bool send_packet() {
     bool res = false;
 
-    pthread_mutex_lock(&mux);
-
     if (head != NULL) {
+        pthread_mutex_lock(&mux);
+
         item_t *item = head;
 
         pthread_mutex_unlock(&mux);
 
-        printf("Queue: send packet\n");
+        syslog(LOG_INFO, "Queue: pop to air (%i)", item->len);
         rnode_to_air(item->data, item->len);
 
         pthread_mutex_lock(&mux);
@@ -57,10 +59,10 @@ static bool send_packet() {
         free(item);
 
         res = true;
-    }
 
-    pthread_mutex_unlock(&mux);
-    csma_update_airtime();
+        pthread_mutex_unlock(&mux);
+        csma_update_airtime();
+    }
 
     return res;
 }
@@ -70,26 +72,33 @@ static void * queue_worker(void *p) {
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
     while (true) {
-        if (tx_enable) {
-            uint64_t now = get_time();
+        uint64_t now = get_time();
 
-            if (now > tx_delay) {
-                uint32_t delay = csma_get_cw();
+        if (sx126x_get_state() != SX126X_TX) {
+            if (tx_enable) {
+                if (now >= tx_delay) {
+                    uint32_t delay = csma_get_cw();
 
-                send_packet();
-                tx_delay = now + delay;
-            } else if (now > rssi_delay) {
-                rssi_delay = now + 1000;
+                    send_packet();
+                    tx_delay = now + delay;
+                } else if (now > rssi_delay) {
+                    rssi_delay = now + 1000;
 
-                csma_update_current_rssi();
+                    csma_update_current_rssi();
+                }
+            } else {
+                if (now >= tx_disabled) {
+                    syslog(LOG_WARNING, "TX disabled to long!");
+                    tx_enable = true;
+                }
             }
-        } else {
-            usleep(1000);
         }
+        usleep(1000);
     }
 }
 
 void queue_init() {
+
     pthread_mutex_init(&mux, NULL);
 
     pthread_t thread;
@@ -98,7 +107,14 @@ void queue_init() {
     pthread_detach(thread);
 }
 
+void queue_set_busy_timeout(uint32_t ms) {
+    tx_timeout = ms * 3 / 2;
+    syslog(LOG_INFO, "Maximum medium busy %i ms", tx_timeout);
+}
+
 void queue_push(const uint8_t *buf, size_t len) {
+    syslog(LOG_INFO, "Queue: push (%i bytes)", len);
+
     item_t *item = malloc(sizeof(item_t));
 
     item->data = malloc(len);
@@ -116,16 +132,26 @@ void queue_push(const uint8_t *buf, size_t len) {
     }
 
     pthread_mutex_unlock(&mux);
-
-    printf("Queue: add packet\n");
 }
 
-void queue_medium_state(bool free) {
-    tx_enable = free;
+void queue_medium_state(cause_medium_t cause) {
+    uint64_t    now = get_time();
 
-    if (free) {
-        uint32_t delay = csma_get_cw();
+    switch(cause) {
+        case CAUSE_INIT:
+        case CAUSE_TX_DONE:
+            tx_enable = free;
+            tx_delay = now;
 
-        tx_delay = get_time() + delay;
+        case CAUSE_RX_DONE:
+        case CAUSE_HEADER_ERR:
+            tx_enable = free;
+            tx_delay = now + csma_get_cw();
+            break;
+
+        case CAUSE_PREAMBLE_DETECTED:
+            tx_enable = false;
+            tx_disabled = now + tx_timeout;
+            break;
     }
 }

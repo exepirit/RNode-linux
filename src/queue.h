@@ -11,8 +11,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "sx126x.h"
 
 void queue_init();
+void queue_set_busy_timeout(uint32_t ms);
 void queue_push(const uint8_t *buf, size_t len);
 
-void queue_medium_state(bool free);
+void queue_medium_state(cause_medium_t cause);

@@ -71,9 +71,24 @@ typedef enum {
     RX_CONTINUOUS           = 0xFFFFFF
 } rx_timeout_t;
 
+typedef enum {
+    CAUSE_INIT = 0,
+    CAUSE_PREAMBLE_DETECTED,
+    CAUSE_HEADER_ERR,
+    CAUSE_RX_DONE,
+    CAUSE_TX_DONE,
+} cause_medium_t;
+
+typedef enum {
+    SX126X_IDLE = 0,
+    SX126X_RX_SINGLE,
+    SX126X_RX_CONTINUOUS,
+    SX126X_TX
+} state_t;
+
 typedef void (*sx126x_rx_done_callback_t)(uint16_t len);
 typedef void (*sx126x_tx_done_callback_t)(void);
-typedef void (*sx126x_medium_callback_t)(bool free);
+typedef void (*sx126x_medium_callback_t)(cause_medium_t cause);
 
 bool sx126x_init_spi(const char *spidev, uint8_t cs_port, uint8_t cs_pin);
 bool sx126x_init_rst(uint8_t port, uint8_t pin);
@@ -109,3 +124,4 @@ float sx126x_packet_symbols(uint16_t len);
 float sx126x_lora_symbol_time_ms();
 
 int8_t sx126x_current_rssi();
+state_t sx126x_get_state();

@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <syslog.h>
 
 #include "rnode.h"
 #include "kiss.h"
@@ -258,7 +259,7 @@ static void ans_cr(const uint8_t *param) {
 
 static void ans_radio_state(const uint8_t *param) {
     if (param[0] == 1) {
-        sx126x_set_freq(915000000);
+        sx126x_set_freq(current_freq);
         sx126x_set_tx_power(current_tx_power, TX_POWER_SX1262);
 
         sx126x_set_lora_modulation(current_sf, current_bw, current_cr, LDRO_OFF);
@@ -267,7 +268,8 @@ static void ans_radio_state(const uint8_t *param) {
 
         sx126x_request(RX_CONTINUOUS);
 
-        printf("Radio on\n");
+        syslog(LOG_INFO, "Radio on");
+        queue_set_busy_timeout(sx126x_packet_symbols(255) * sx126x_lora_symbol_time_ms());
     }
 
     uint8_t ans[] = { CMD_RADIO_STATE, param[0] };
@@ -332,7 +334,7 @@ void rnode_from_channel(const uint8_t *buf, size_t len) {
             break;
 
         default:
-            printf("RNode: Unknown %02X\n", cmd);
+            syslog(LOG_WARNING, "RNode unknown %02X", cmd);
             break;
     }
 }
@@ -356,8 +358,6 @@ void rnode_from_air(const uint8_t *buf, size_t len) {
     /* by combining two raw LoRa packets.       */
     /* We read the 1-byte header and extract    */
     /* packet sequence number and split flags   */
-
-    printf("From air %i\n", len);
 
     uint8_t header = *buf;
     bool    split = header & FLAG_SPLIT;
@@ -423,6 +423,8 @@ void rnode_from_air(const uint8_t *buf, size_t len) {
 }
 
 static void tx_buf(const uint8_t *buf, size_t len, uint8_t flag) {
+    syslog(LOG_INFO, "TX buf (%i bytes)", len);
+
     uint8_t buf_air[len + HEADER_L];
 
     buf_air[0] = seq_tx | flag;
@@ -431,6 +433,8 @@ static void tx_buf(const uint8_t *buf, size_t len, uint8_t flag) {
     sx126x_begin_packet();
     sx126x_write(buf_air, len + HEADER_L);
     sx126x_end_packet();
+
+    syslog(LOG_INFO, "TX buf done");
 }
 
 void rnode_to_air(const uint8_t *buf, size_t len) {

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <syslog.h>
 
 #include "util.h"
 #include "kiss.h"
@@ -40,33 +41,33 @@ void tcp_init(uint32_t port) {
     address.sin_port = htons(port);
 
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("bind failed");
+        syslog(LOG_ERR, "TCP bind failed");
         exit(EXIT_FAILURE);
     }
 
     if (listen(server_fd, 1) < 0) {
-        perror("listen");
+        syslog(LOG_ERR, "TCP listen");
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d\n", port);
+    syslog(LOG_INFO, "TCP listening on port %d", port);
 }
 
 void tcp_read() {
     int addrlen = sizeof(address);
 
     if ((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
-        perror("accept");
+        syslog(LOG_ERR, "TCP accept");
         exit(EXIT_FAILURE);
     }
 
-    printf("Client connected.\n");
+    syslog(LOG_INFO, "Client connected");
 
     while (true) {
         int res = read(client_fd, buf_in, sizeof(buf_in));
 
         if (res <= 0) {
-            printf("Client disconnected.\n");
+            syslog(LOG_INFO, "Client disconnected");
             close(client_fd);
             break;
         }

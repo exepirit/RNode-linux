@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 #include <math.h>
 #include <fcntl.h>
@@ -102,13 +103,6 @@ typedef enum {
     IRQ_NONE                = 0x0000
 } irq_t;
 
-typedef enum {
-    STATE_IDLE = 0,
-    STATE_RX_SINGLE,
-    STATE_RX_CONTINUOUS,
-    STATE_TX
-} state_t;
-
 static struct gpiod_line    *cs_line = NULL;
 static struct gpiod_line    *rst_line = NULL;
 static struct gpiod_line    *busy_line = NULL;
@@ -135,7 +129,7 @@ static float                symbol_rate;
 static float                symbol_time_ms;
 static uint32_t             bitrate;
 
-static state_t              state = STATE_IDLE;
+static state_t              state = SX126X_IDLE;
 
 static sx126x_rx_done_callback_t    rx_done_callback = NULL;
 static sx126x_tx_done_callback_t    tx_done_callback = NULL;
@@ -149,7 +143,7 @@ static void wait_on_busy() {
 
 static void switch_ant() {
     switch (state) {
-        case STATE_IDLE:
+        case SX126X_IDLE:
             if (rx_en_line) {
                 gpiod_line_set_value(rx_en_line, 0);
             }
@@ -158,8 +152,8 @@ static void switch_ant() {
             }
             break;
 
-        case STATE_RX_SINGLE:
-        case STATE_RX_CONTINUOUS:
+        case SX126X_RX_SINGLE:
+        case SX126X_RX_CONTINUOUS:
             if (tx_en_line) {
                 gpiod_line_set_value(tx_en_line, 0);
             }
@@ -171,7 +165,7 @@ static void switch_ant() {
             }
             break;
 
-        case STATE_TX:
+        case SX126X_TX:
             if (rx_en_line) {
                 gpiod_line_set_value(rx_en_line, 0);
             }
@@ -426,10 +420,15 @@ static bool set_rx(uint32_t timeout) {
 /* * */
 
 static void * irq_worker(void *p) {
-    struct gpiod_line_event event;
+    struct  gpiod_line_event event;
+    bool    crc_ok = true;
 
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+
+    while (state == SX126X_IDLE) {
+        usleep(1000);
+    }
 
     while (true) {
         int res = gpiod_line_event_wait(dio1_line, NULL);
@@ -441,28 +440,44 @@ static void * irq_worker(void *p) {
 
             if (event.event_type == GPIOD_LINE_EVENT_RISING_EDGE) {
                 uint16_t    status = get_irq_status();
-                bool        crc_ok = true;
 
                 if (status & IRQ_CRC_ERR) {
-                    crc_ok = false;
                     clear_irq_status(IRQ_CRC_ERR);
+                    syslog(LOG_INFO, "IRQ: CRC ERR");
+
+                    crc_ok = false;
                 }
 
                 if (status & IRQ_PREAMBLE_DETECTED) {
-                    if (medium_callback) {
-                        medium_callback(false);
-                    }
                     clear_irq_status(IRQ_PREAMBLE_DETECTED);
+                    syslog(LOG_INFO, "IRQ: PREAMBLE DETECTED");
+                    crc_ok = true;
+
+                    if (medium_callback) {
+                        medium_callback(CAUSE_PREAMBLE_DETECTED);
+                    }
                 }
 
                 if (status & IRQ_HEADER_ERR) {
-                    if (medium_callback) {
-                        medium_callback(true);
-                    }
                     clear_irq_status(IRQ_HEADER_ERR);
+                    syslog(LOG_INFO, "IRQ: HEADER ERR");
+
+                    if (medium_callback) {
+                        medium_callback(CAUSE_HEADER_ERR);
+                    }
                 }
 
                 if (status & IRQ_RX_DONE) {
+                    if (state == SX126X_RX_CONTINUOUS) {
+                        clear_irq_status(IRQ_RX_DONE);
+                    }
+
+                    syslog(LOG_INFO, "IRQ: RX DONE");
+
+                    if (medium_callback) {
+                        medium_callback(CAUSE_RX_DONE);
+                    }
+
                     if (crc_ok) {
                         payload_tx_rx = get_rx_buffer_status();
 
@@ -471,26 +486,19 @@ static void * irq_worker(void *p) {
                         }
 
                     }
-
-                    if (state == STATE_RX_CONTINUOUS) {
-                        clear_irq_status(IRQ_RX_DONE);
-                    }
-
-                    if (medium_callback) {
-                        medium_callback(true);
-                    }
                 }
 
                 if (status & IRQ_TX_DONE) {
+                    clear_irq_status(IRQ_TX_DONE);
+                    syslog(LOG_INFO, "IRQ: TX DONE");
+
+                    if (medium_callback) {
+                        medium_callback(CAUSE_TX_DONE);
+                    }
+
                     if (tx_done_callback) {
                         tx_done_callback();
                     }
-
-                    if (medium_callback) {
-                        medium_callback(true);
-                    }
-
-                    clear_irq_status(IRQ_TX_DONE);
                 }
             }
         }
@@ -636,7 +644,7 @@ bool sx126x_begin() {
     gpiod_line_set_value(rst_line, 1);
     usleep(10000);
 
-    state = STATE_IDLE;
+    state = SX126X_IDLE;
     switch_ant();
 
     if (!set_standby(STANDBY_RC)) {
@@ -838,7 +846,7 @@ void sx126x_end_packet() {
     wait_on_busy();
     set_packet_params_loRa(save_preamble_len, save_header_type, payload_tx_rx, save_crc);
 
-    state = STATE_TX;
+    state = SX126X_TX;
     switch_ant();
 
     wait_on_busy();
@@ -846,21 +854,22 @@ void sx126x_end_packet() {
 }
 
 void sx126x_request(uint32_t timeout) {
-    uint16_t mask = IRQ_RX_DONE | IRQ_TIMEOUT | IRQ_HEADER_ERR | IRQ_CRC_ERR | IRQ_PREAMBLE_DETECTED;
-
-    wait_on_busy();
-    irq_setup(mask, mask, 0, 0);
+    uint16_t mask = IRQ_RX_DONE | IRQ_HEADER_ERR | IRQ_CRC_ERR | IRQ_PREAMBLE_DETECTED;
 
     if (timeout == RX_CONTINUOUS) {
-        state = STATE_RX_CONTINUOUS;
+        state = SX126X_RX_CONTINUOUS;
     } else {
-        state = STATE_RX_SINGLE;
+        mask |= IRQ_TIMEOUT;
+        state = SX126X_RX_SINGLE;
         timeout <<= 6;
 
         if (timeout > 0xFFFFFF) {
             timeout = RX_SINGLE;
         }
     }
+
+    wait_on_busy();
+    irq_setup(mask, mask, 0, 0);
 
     switch_ant();
     wait_on_busy();
@@ -933,4 +942,8 @@ float sx126x_packet_symbols(uint16_t len) {
 
 float sx126x_lora_symbol_time_ms() {
     return symbol_time_ms;
+}
+
+state_t sx126x_get_state() {
+    return state;
 }
