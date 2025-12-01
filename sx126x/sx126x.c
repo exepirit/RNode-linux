@@ -820,14 +820,8 @@ void sx126x_set_sync_word(uint16_t x) {
 }
 
 void sx126x_begin_packet() {
-    if (medium_callback) {
-        medium_callback(false);
-    }
-
     payload_tx_rx = 0;
     fifo_tx_addr_ptr = 0;
-
-    /* TODO rx/tx pin control */
 }
 
 void sx126x_write(const uint8_t *buf, uint8_t len) {
@@ -870,6 +864,9 @@ void sx126x_request(uint32_t timeout) {
 
     wait_on_busy();
     irq_setup(mask, mask, 0, 0);
+
+    wait_on_busy();
+    clear_irq_status(IRQ_ALL);
 
     switch_ant();
     wait_on_busy();

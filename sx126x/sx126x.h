@@ -76,7 +76,7 @@ typedef enum {
     CAUSE_PREAMBLE_DETECTED,
     CAUSE_HEADER_ERR,
     CAUSE_RX_DONE,
-    CAUSE_TX_DONE,
+    CAUSE_TX_DONE
 } cause_medium_t;
 
 typedef enum {
