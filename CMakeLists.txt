@@ -17,3 +17,6 @@ add_subdirectory(sx126x)
 
 include_directories(src)
 include_directories(sx126x)
+
+install(FILES rnode.yaml DESTINATION /mnt/rns)
+install(TARGETS ${PROJECT_NAME} DESTINATION sbin)
