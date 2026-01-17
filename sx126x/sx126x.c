@@ -868,11 +868,9 @@ void sx126x_packet_signal_raw(uint8_t *rssi, int8_t *snr, uint8_t *signal_rssi) 
 }
 
 int8_t sx126x_current_rssi() {
-    int8_t rssi;
-
     wait_on_busy();
 
-    return -get_current_rssi(&rssi) / 2;
+    return -get_current_rssi() / 2;
 }
 
 uint32_t sx126x_air_time(uint16_t len, uint32_t *preamble_ms, uint32_t *data_ms) {
