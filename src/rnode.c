@@ -19,6 +19,7 @@
 #include "queue.h"
 #include "sx126x.h"
 #include "csma.h"
+#include "config.h"
 
 #define SINGLE_MTU          255
 #define HEADER_L            1
@@ -277,6 +278,11 @@ static void ans_radio_state(const uint8_t *param) {
 
 void rnode_start() {
     sx126x_begin();
+
+    if (config->dio2_as_rf_switch) {
+        syslog(LOG_INFO, "DIO2 as RF switch enabled");
+        sx126x_set_dio2_as_rf_switch(true);
+    }
 
     sx126x_set_dio3_txco_ctrl(DIO3_OUTPUT_1_8, TXCO_DELAY_10);
     sx126x_set_freq(current_freq);

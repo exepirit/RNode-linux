@@ -28,6 +28,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    if (config->dio2_as_rf_switch && (config->tx_en.port || config->rx_en.port)) {
+        syslog(LOG_ERR, "dio2_as_rf_switch is incompatible with tx_en/rx_en GPIO pins");
+        return 1;
+    }
+
     if (!sx126x_init_spi(config->spi, config->cs.port, config->cs.pin)) {
         syslog(LOG_ERR, "SPI init");
         return 1;

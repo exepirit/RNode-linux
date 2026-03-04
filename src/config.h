@@ -26,6 +26,7 @@ typedef struct {
     config_gpio_t   rx_en;
     config_gpio_t   tx_en;
     uint32_t        tcp_port;
+    bool            dio2_as_rf_switch;
 } config_t;
 
 bool config_load(const char *filename);

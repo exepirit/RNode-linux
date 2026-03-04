@@ -17,14 +17,15 @@ const cyaml_schema_field_t gpio_fields_schema[] = {
 };
 
 const cyaml_schema_field_t config_fields_schema[] = {
-    CYAML_FIELD_STRING_PTR("spi",       CYAML_FLAG_POINTER,  config_t, spi, 0, CYAML_UNLIMITED),
-    CYAML_FIELD_MAPPING("cs",           CYAML_FLAG_DEFAULT, config_t, cs, gpio_fields_schema),
-    CYAML_FIELD_MAPPING("rst",          CYAML_FLAG_DEFAULT, config_t, rst, gpio_fields_schema),
-    CYAML_FIELD_MAPPING("busy",         CYAML_FLAG_DEFAULT, config_t, busy, gpio_fields_schema),
-    CYAML_FIELD_MAPPING("dio1",         CYAML_FLAG_DEFAULT, config_t, dio1, gpio_fields_schema),
-    CYAML_FIELD_MAPPING("rx_en",        CYAML_FLAG_DEFAULT, config_t, rx_en, gpio_fields_schema),
-    CYAML_FIELD_MAPPING("tx_en",        CYAML_FLAG_DEFAULT, config_t, tx_en, gpio_fields_schema),
-    CYAML_FIELD_UINT("tcp_port",        CYAML_FLAG_DEFAULT, config_t, tcp_port),
+    CYAML_FIELD_STRING_PTR("spi",           CYAML_FLAG_POINTER,  config_t, spi, 0, CYAML_UNLIMITED),
+    CYAML_FIELD_MAPPING("cs",               CYAML_FLAG_DEFAULT,  config_t, cs,    gpio_fields_schema),
+    CYAML_FIELD_MAPPING("rst",              CYAML_FLAG_DEFAULT,  config_t, rst,   gpio_fields_schema),
+    CYAML_FIELD_MAPPING("busy",             CYAML_FLAG_DEFAULT,  config_t, busy,  gpio_fields_schema),
+    CYAML_FIELD_MAPPING("dio1",             CYAML_FLAG_DEFAULT,  config_t, dio1,  gpio_fields_schema),
+    CYAML_FIELD_MAPPING("rx_en",            CYAML_FLAG_OPTIONAL, config_t, rx_en, gpio_fields_schema),
+    CYAML_FIELD_MAPPING("tx_en",            CYAML_FLAG_OPTIONAL, config_t, tx_en, gpio_fields_schema),
+    CYAML_FIELD_UINT("tcp_port",            CYAML_FLAG_DEFAULT,  config_t, tcp_port),
+    CYAML_FIELD_BOOL("dio2_as_rf_switch",   CYAML_FLAG_OPTIONAL, config_t, dio2_as_rf_switch),
     CYAML_FIELD_END
 };
 
