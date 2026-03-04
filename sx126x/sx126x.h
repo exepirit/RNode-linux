@@ -114,6 +114,7 @@ void sx126x_set_timeout_callback(sx126x_timeout_callback_t callback);
 bool sx126x_begin();
 
 void sx126x_set_dio3_txco_ctrl(uint8_t voltage, uint16_t delay);
+void sx126x_set_dio2_as_rf_switch(bool enable);
 void sx126x_set_freq(uint64_t x);
 void sx126x_set_tx_power(uint8_t db);
 void sx126x_set_lora_modulation(uint8_t sf, bw_t bw, cr_t cr, ldro_t ldro);

@@ -607,6 +607,13 @@ void sx126x_set_dio3_txco_ctrl(uint8_t voltage, uint16_t delay) {
     calibrate(0xFF);
 }
 
+void sx126x_set_dio2_as_rf_switch(bool enable) {
+    uint8_t msg[] = { 0x9D, enable ? 0x01 : 0x00 };
+
+    wait_on_busy();
+    write_bytes(msg, sizeof(msg));
+}
+
 void sx126x_recalibrate() {
     set_standby(STANDBY_RC);
     calibrate(0xFF);
