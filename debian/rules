@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+%:
+	dh $@ --buildsystem=cmake
+
+override_build:
+	dh_build --buildsystem=cmake
+
+override_install:
+	dh_install --buildsystem=cmake

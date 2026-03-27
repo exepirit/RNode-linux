@@ -1,0 +1,20 @@
+Source: rnode
+Section: utils
+Priority: optional
+Maintainer: exepirit
+Uploaders: exepirit
+Build-Depends:
+ cmake,
+ debhelper-compat (= 12)
+Standards-Version: 4.6.2
+Homepage: https://github.com/yourusername/rnode-linux
+
+Package: rnode
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: RNode implementation for Linux
+ Implementation of RNode functionality for Linux based on SPI sx126x modules.
+ This package provides a software radio node for LoRa-based communication
+ protocols, commonly used in IoT and telemetry applications.

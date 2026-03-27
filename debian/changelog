@@ -1,0 +1,6 @@
+rnode (0.1.0) unstable; urgency=medium
+
+  * Initial release
+  * RNode implementation for Linux with SPI sx126x support
+
+ -- exepriti <email@example.com>  Mon, 27 Mar 2026 00:00:00 +0000
